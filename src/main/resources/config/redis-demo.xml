@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+			http://www.springframework.org/schema/beans/spring-beans.xsd
+			http://www.springframework.org/schema/context
+			http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <!-- pool config start 可根据自己的需求，配置一个连接池信息也可-->
+    <bean id="jedisPoolConfigMaster" class="redis.clients.jedis.JedisPoolConfig">
+        <property name="maxIdle" value="${redis.master.maxIdle}" />
+        <property name="maxTotal" value="${redis.master.maxActive}" />
+        <property name="minIdle" value="1" />
+        <property name="maxWaitMillis" value="${redis.master.maxWaitMillis}" />
+    </bean>
+
+    <bean id="jedisPoolConfigSlave" class="redis.clients.jedis.JedisPoolConfig">
+        <property name="maxIdle" value="${redis.slave.maxIdle}" />
+        <property name="maxTotal" value="${redis.slave.maxActive}" />
+        <property name="minIdle" value="1" />
+        <property name="maxWaitMillis" value="${redis.slave.maxWaitMillis}" />
+    </bean>
+    <!-- pool config end -->
+
+    <!-- sharded jedis pool slave 读redis服务器的配置 这里读写用的都是ShardedJedis，配置多个的情况下，会自动对请求做负载均衡-->
+    <bean id="shardedJedisPoolSlave" class="redis.clients.jedis.ShardedJedisPool"  >
+        <constructor-arg index="0" ref="jedisPoolConfigSlave" />
+        <constructor-arg index="1">
+            <list>
+                <bean class="redis.clients.jedis.JedisShardInfo">
+                    <constructor-arg name="host" value="${redis.slave.host}" />
+                    <constructor-arg name="port" value="${redis.slave.port}" />
+                    <constructor-arg name="timeout" value="${redis.slave.timeout}" />
+                    <property name="password" value="${redis.slave.pass}" />
+                </bean>
+            </list>
+        </constructor-arg>
+    </bean>
+    <!-- sharded jedis pool slave -->
+
+    <!-- sharded jedis pool master 写服务器的配置-->
+    <bean id="shardedJedisPoolMaster" class="redis.clients.jedis.ShardedJedisPool"  >
+        <constructor-arg index="0" ref="jedisPoolConfigMaster" />
+        <constructor-arg index="1">
+            <list>
+                <bean class="redis.clients.jedis.JedisShardInfo">
+                    <constructor-arg name="host" value="${redis.master.host}" />
+                    <constructor-arg name="port" value="${redis.master.port}" />
+                    <constructor-arg name="timeout" value="${redis.master.timeout}" />
+                    <property name="password" value="${redis.master.pass}" />
+                </bean>
+            </list>
+        </constructor-arg>
+    </bean>
+    <!-- sharded jedis pool master -->
+
+    <!-- redis client index 0 为name，方便记录日志 -->
+    <bean id="shardedJedisMasterClient" class="com.iqiyi.game.tool.cache.redis.client.RedisClient" >
+        <constructor-arg index="0" value="gamecenter_redis_master" />
+        <constructor-arg index="1" ref="shardedJedisPoolMaster" />
+    </bean>
+
+    <bean id="shardedJedisSlaveClient" class="com.iqiyi.game.tool.cache.redis.client.RedisClient" >
+        <constructor-arg index="0" value="gamecenter_redis_slave" />
+        <constructor-arg index="1" ref="shardedJedisPoolSlave" />
+    </bean>
+    <!-- redis client end -->
+
+    <!-- redis service 最终客户端使用的类，提供两种构造函数注入方式，至少需要配master -->
+    <bean id="reidsService" class="com.iqiyi.game.tool.cache.redis.service.RedisService" >
+        <constructor-arg index="0" value="shardedJedisMasterClient" />
+        <constructor-arg index="1" ref="shardedJedisSlaveClient" />
+    </bean>
+
+    <bean id="reidsService2" class="com.iqiyi.game.tool.cache.redis.service.RedisService" >
+        <constructor-arg index="0" value="shardedJedisMasterClient" />
+    </bean>
+    <!-- redis service -->
+
+</beans>
